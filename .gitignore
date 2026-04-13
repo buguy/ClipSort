@@ -1,0 +1,16 @@
+# API keys - never commit these
+*.key
+*.env
+
+# AHK compiled
+*.exe
+
+# Temp files
+*.tmp
+clip_temp.*
+clip_b64.*
+
+# OS files
+Thumbs.db
+Desktop.ini
+.DS_Store

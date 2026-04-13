@@ -2,74 +2,75 @@
 #SingleInstance Force
 
 ; ============================================================
-; ClipToObsidian AI 自動分類存檔（文字 + 圖片）
-; 快捷鍵：Ctrl+Shift+D
-; Debug：Ctrl+Shift+Alt+D
+; ClipSort — AI-powered clipboard organizer
+; Hotkey: Ctrl+Shift+D
+; Debug:  Ctrl+Shift+Alt+D
 ;
-; 文字 → AI 分類 → 存到對應資料夾
-; 圖片 → AI 看圖分類 → 圖片存到對應資料夾
+; Text  → AI categorizes → saves as .md note
+; Image → AI vision categorizes → saves as .png
 ; ============================================================
 
-; === 設定區 ===
-VAULT_PATH := "D:\Obsidian\Obsidian"
-OPENROUTER_API_KEY := "YourAPIKey"
-MODEL := "google/gemini-2.5-flash-lite"
+; === Configuration ===
+; Edit these values to match your setup
+TARGET_DIR := "D:\Notes"                   ; Any folder path
+OPENROUTER_API_KEY := "YOUR_OPENROUTER_API_KEY_HERE"   ; Get from https://openrouter.ai/settings/keys
+MODEL := "google/gemini-2.5-flash-lite"                ; Supports both text and vision
 
-; === 主快捷鍵 ===
+; === Hotkeys ===
 ^+d:: {
     RunClassify(false)
 }
 
-; === Debug 快捷鍵 ===
 ^+!d:: {
     RunClassify(true)
 }
 
 RunClassify(showDebug) {
-    global VAULT_PATH, OPENROUTER_API_KEY, MODEL
+    global TARGET_DIR, OPENROUTER_API_KEY, MODEL
 
-    ; 判斷剪貼簿類型：圖片 or 文字
-    clipType := GetClipboardType()
-
-    if (clipType = "none") {
-        TrayTip "ClipToObsidian AI", "剪貼簿沒有內容", "iconi"
+    if (OPENROUTER_API_KEY = "YOUR_OPENROUTER_API_KEY_HERE") {
+        MsgBox("Please set your OpenRouter API key in the script first.`n`nOpen ClipSort.ahk with a text editor and edit line 14.", "ClipSort Setup")
         return
     }
 
-    TrayTip "ClipToObsidian AI", "AI 分類中...", "iconi"
+    clipType := GetClipboardType()
 
-    folderTree := ScanFolderTree(VAULT_PATH)
+    if (clipType = "none") {
+        TrayTip "ClipSort", "Clipboard is empty", "iconi"
+        return
+    }
+
+    TrayTip "ClipSort", "AI categorizing...", "iconi"
+
+    folderTree := ScanFolderTree(TARGET_DIR)
 
     if (clipType = "image") {
-        ; 圖片流程：存暫存檔 → 轉 base64 → 送 AI
-        tempPng := A_Temp "\clip_temp.png"
+        tempPng := A_Temp "\clipsort_temp.png"
         if !SaveClipboardImage(tempPng) {
-            TrayTip "ClipToObsidian AI", "圖片儲存失敗", "iconx"
+            TrayTip "ClipSort", "Failed to save image", "iconx"
             return
         }
 
         base64 := FileToBase64(tempPng)
         if (base64 = "") {
-            TrayTip "ClipToObsidian AI", "圖片轉碼失敗", "iconx"
+            TrayTip "ClipSort", "Failed to encode image", "iconx"
             return
         }
 
         if (showDebug) {
             b64Len := StrLen(base64)
-            MsgBox("Base64 長度: " b64Len " 字元`n約 " Round(b64Len / 1024) " KB", "Image Debug")
+            MsgBox("Base64 length: " b64Len " chars`n~" Round(b64Len / 1024) " KB", "Image Debug")
         }
 
         result := CallAIWithImage(base64, folderTree, OPENROUTER_API_KEY, MODEL, showDebug)
 
         if (result.error) {
-            TrayTip "ClipToObsidian AI", "AI 呼叫失敗: " result.error, "iconx"
+            TrayTip "ClipSort", "AI error: " result.error, "iconx"
             return
         }
 
-        ; 把圖片移到目標資料夾
         folderPath := result.folder
-        noteTitle := result.title
-        targetDir := VAULT_PATH "\" StrReplace(folderPath, "/", "\")
+        targetDir := TARGET_DIR "\" StrReplace(folderPath, "/", "\")
         if !DirExist(targetDir)
             DirCreate(targetDir)
 
@@ -77,27 +78,25 @@ RunClassify(showDebug) {
         parts := StrSplit(folderPath, "/")
         folderSuffix := parts[parts.Length]
 
-        ; 存圖片
         imgFileName := timeStamp "_" folderSuffix ".png"
         imgPath := targetDir "\" imgFileName
         FileCopy(tempPng, imgPath, true)
         FileDelete(tempPng)
 
-        TrayTip "ClipToObsidian AI", "截圖已存到 " folderPath "/" imgFileName, "iconi"
+        TrayTip "ClipSort", "Saved to " folderPath "/" imgFileName, "iconi"
 
     } else {
-        ; 文字流程（跟之前一樣）
         clipText := A_Clipboard
         result := CallAIWithText(clipText, folderTree, OPENROUTER_API_KEY, MODEL, showDebug)
 
         if (result.error) {
-            TrayTip "ClipToObsidian AI", "AI 呼叫失敗: " result.error, "iconx"
+            TrayTip "ClipSort", "AI error: " result.error, "iconx"
             return
         }
 
         folderPath := result.folder
         noteTitle := result.title
-        targetDir := VAULT_PATH "\" StrReplace(folderPath, "/", "\")
+        targetDir := TARGET_DIR "\" StrReplace(folderPath, "/", "\")
         if !DirExist(targetDir)
             DirCreate(targetDir)
 
@@ -109,19 +108,18 @@ RunClassify(showDebug) {
 
         fullTimestamp := FormatTime(, "yyyy-MM-dd HH:mm:ss")
         content := "# " noteTitle "`n`n"
-        content .= "- **Created**：" fullTimestamp "`n"
-        content .= "- **Category**：" folderPath "`n`n"
+        content .= "- **Created**: " fullTimestamp "`n"
+        content .= "- **Category**: " folderPath "`n`n"
         content .= "---`n`n"
         content .= clipText
         WriteUTF8File(filePath, content)
 
-        TrayTip "ClipToObsidian AI", "已存到 " folderPath "/" fileName ".md", "iconi"
+        TrayTip "ClipSort", "Saved to " folderPath "/" fileName ".md", "iconi"
     }
 }
 
-; === 判斷剪貼簿類型 ===
+; === Clipboard Type Detection ===
 GetClipboardType() {
-    ; CF_BITMAP = 2, CF_DIB = 8, CF_DIBV5 = 17
     if DllCall("IsClipboardFormatAvailable", "uint", 2) || DllCall("IsClipboardFormatAvailable", "uint", 8) {
         return "image"
     }
@@ -130,13 +128,12 @@ GetClipboardType() {
     return "none"
 }
 
-; === 用 PowerShell 存剪貼簿圖片（-STA 模式，縮小到 max 800px） ===
+; === Save Clipboard Image via PowerShell -STA ===
 SaveClipboardImage(outputPath) {
-    psFile := A_Temp "\clip_save.ps1"
+    psFile := A_Temp "\clipsort_save.ps1"
     if FileExist(psFile)
         FileDelete(psFile)
 
-    ; 截圖存檔並縮小，避免 base64 太大
     psContent := "Add-Type -AssemblyName System.Windows.Forms`n"
     psContent .= "Add-Type -AssemblyName System.Drawing`n"
     psContent .= "$img = [System.Windows.Forms.Clipboard]::GetImage()`n"
@@ -174,10 +171,10 @@ SaveClipboardImage(outputPath) {
     }
 }
 
-; === 檔案轉 Base64（用 PowerShell .ps1 檔案避免引號問題） ===
+; === File to Base64 via PowerShell ===
 FileToBase64(filePath) {
-    resultFile := A_Temp "\clip_b64.txt"
-    psFile := A_Temp "\clip_b64.ps1"
+    resultFile := A_Temp "\clipsort_b64.txt"
+    psFile := A_Temp "\clipsort_b64.ps1"
     if FileExist(resultFile)
         FileDelete(resultFile)
     if FileExist(psFile)
@@ -202,7 +199,7 @@ FileToBase64(filePath) {
     return ""
 }
 
-; === 掃描兩層資料夾結構 ===
+; === Scan Two-Level Folder Structure ===
 ScanFolderTree(vaultPath) {
     skipList := Map("attachments", 1, "Clippings", 1, "templates", 1, "Inbox", 1)
     tree := ""
@@ -239,7 +236,7 @@ ScanFolderTree(vaultPath) {
     return tree
 }
 
-; === 寫入 UTF-8 無 BOM ===
+; === Write UTF-8 No BOM ===
 WriteUTF8File(filePath, content) {
     stream := ComObject("ADODB.Stream")
     stream.Type := 2
@@ -258,13 +255,13 @@ WriteUTF8File(filePath, content) {
     stream.Close()
 }
 
-; === 建立 prompt 文字 ===
+; === Build Prompt ===
 BuildPrompt(folderTree) {
     q := Chr(34)
     prompt := "You are a note categorizer. Given the content below, decide which folder to store it in.`n`n"
     prompt .= "Folder structure:`n" folderTree "`n"
     prompt .= "Rules:`n"
-    prompt .= "- Use a subfolder path like " q "AI/Tools" q " or " q "Crypto/DeFi" q " when a subfolder fits`n"
+    prompt .= "- Use a subfolder path like " q "Tech/Coding" q " or " q "Finance/Investing" q " when a subfolder fits`n"
     prompt .= "- Use just the parent folder like " q "Tech" q " if no subfolder is a good fit`n"
     prompt .= "- If no existing folder fits, suggest a new path`n"
     prompt .= "- Folder names must be English, single word, capitalized, no spaces`n"
@@ -272,10 +269,8 @@ BuildPrompt(folderTree) {
     return prompt
 }
 
-; === 呼叫 AI（純文字） ===
+; === Call AI (Text) ===
 CallAIWithText(text, folderTree, apiKey, model, showDebug) {
-    result := {folder: "", title: "", error: ""}
-
     displayText := text
     if (StrLen(displayText) > 1500)
         displayText := SubStr(displayText, 1, 1500)
@@ -292,10 +287,8 @@ CallAIWithText(text, folderTree, apiKey, model, showDebug) {
     return SendRequest(body, apiKey, showDebug)
 }
 
-; === 呼叫 AI（圖片） ===
+; === Call AI (Image) ===
 CallAIWithImage(base64, folderTree, apiKey, model, showDebug) {
-    result := {folder: "", title: "", error: ""}
-
     prompt := BuildPrompt(folderTree)
     prompt .= "I am sharing a screenshot. Look at the image and categorize it.`n`n"
     prompt .= "Reply EXACTLY in this format (2 lines only, no extra text):`n"
@@ -303,14 +296,12 @@ CallAIWithImage(base64, folderTree, apiKey, model, showDebug) {
     prompt .= "TITLE: Note Title Here"
 
     escapedPrompt := EscapeJSON(prompt)
-
-    ; OpenRouter vision 格式：content 是 array
     body := '{"model":"' model '","max_tokens":100,"messages":[{"role":"user","content":[{"type":"text","text":"' escapedPrompt '"},{"type":"image_url","image_url":{"url":"data:image/png;base64,' base64 '"}}]}]}'
 
     return SendRequest(body, apiKey, showDebug)
 }
 
-; === 發送 HTTP 請求 ===
+; === Send HTTP Request ===
 SendRequest(body, apiKey, showDebug) {
     result := {folder: "", title: "", error: ""}
 
@@ -319,8 +310,8 @@ SendRequest(body, apiKey, showDebug) {
         whr.Open("POST", "https://openrouter.ai/api/v1/chat/completions", false)
         whr.SetRequestHeader("Content-Type", "application/json")
         whr.SetRequestHeader("Authorization", "Bearer " apiKey)
-        whr.SetRequestHeader("HTTP-Referer", "https://github.com/ClipToObsidian")
-        whr.SetRequestHeader("X-Title", "ClipToObsidian AI")
+        whr.SetRequestHeader("HTTP-Referer", "https://github.com/ClipSort")
+        whr.SetRequestHeader("X-Title", "ClipSort")
         whr.Send(body)
         whr.WaitForResponse()
 
@@ -345,7 +336,7 @@ SendRequest(body, apiKey, showDebug) {
     return result
 }
 
-; === UTF-8 讀取回應 ===
+; === Read UTF-8 Response ===
 ReadUTF8Response(whr) {
     try {
         stream := ComObject("ADODB.Stream")
@@ -363,7 +354,7 @@ ReadUTF8Response(whr) {
     }
 }
 
-; === 解析 AI 回應 ===
+; === Parse AI Response ===
 ParseAIResponse(responseText, showDebug := false) {
     result := {folder: "", title: "", error: ""}
 
@@ -402,7 +393,6 @@ ParseAIResponse(responseText, showDebug := false) {
         }
     }
 
-    ; 清理 folder path
     if (result.folder != "") {
         cleanFolder := ""
         loop parse result.folder {
@@ -423,7 +413,7 @@ ParseAIResponse(responseText, showDebug := false) {
     return result
 }
 
-; === JSON 跳脫 ===
+; === JSON Escape ===
 EscapeJSON(str) {
     str := StrReplace(str, "\", "\\")
     str := StrReplace(str, '"', '\"')

@@ -1,6 +1,8 @@
 # ClipSort
 
-**AI-powered clipboard categorizer for Obsidian.** Press one hotkey to automatically classify and save your clipboard content — text or screenshots — into the right folder in your Obsidian vault.
+**AI-powered clipboard organizer.** Press one hotkey to automatically classify and save your clipboard content — text or screenshots — into the right folder.
+
+Works great with Obsidian, Logseq, Notion (local), or any folder-based note system.
 
 ![Windows](https://img.shields.io/badge/platform-Windows-blue)
 ![AutoHotkey](https://img.shields.io/badge/AutoHotkey-v2.0-green)
@@ -22,7 +24,7 @@ Ctrl+Shift+D
 3. AI reads your content, picks the best folder, and saves it automatically
 4. A notification tells you where it was saved
 
-ClipSort scans your vault's folder structure each time, so the AI always knows your current organization. If no existing folder fits, it creates a new one.
+ClipSort scans your folder structure each time, so the AI always knows your current organization. If no existing folder fits, it creates a new one.
 
 ## Features
 
@@ -30,6 +32,7 @@ ClipSort scans your vault's folder structure each time, so the AI always knows y
 - **AI Vision** — Screenshots are analyzed visually, not just OCR
 - **Two-level folder scanning** — AI sees both parent and sub-folders
 - **Auto-create folders** — AI suggests new folders when needed
+- **No app lock-in** — Just saves files to folders. Works with any app that reads local files
 - **Tiny cost** — ~$0.08/month for text, ~$0.30/month for heavy screenshot use
 - **Debug mode** — Ctrl+Shift+Alt+D shows raw AI response
 
@@ -37,7 +40,6 @@ ClipSort scans your vault's folder structure each time, so the AI always knows y
 
 - **Windows 10/11**
 - **[AutoHotkey v2.0+](https://www.autohotkey.com/)**
-- **[Obsidian](https://obsidian.md/)**
 - **[OpenRouter](https://openrouter.ai/) account + API key** (pay-as-you-go, no subscription)
 
 ## Quick Start
@@ -51,10 +53,12 @@ Sign up at [OpenRouter](https://openrouter.ai/), add a few dollars of credits, a
 Open `ClipSort.ahk` in a text editor and set your values:
 
 ```ahk
-VAULT_PATH := "D:\Obsidian\MyVault"                 ; Your vault path
+VAULT_PATH := "D:\Notes"                             ; Any folder path
 OPENROUTER_API_KEY := "sk-or-v1-xxxxxxxxxxxx"        ; Your API key
 MODEL := "google/gemini-2.5-flash-lite"              ; Default model
 ```
+
+`VAULT_PATH` can be any folder — your Obsidian vault, a Logseq graph, a Dropbox folder, or just `C:\Users\you\Documents\Notes`.
 
 ### 3. Set up folders (optional)
 
@@ -63,6 +67,8 @@ Run `InitFolders.ahk` once to create a starter folder structure, or skip this an
 Edit `InitFolders.ahk` to customize the folders before running:
 
 ```ahk
+VAULT := "D:\Notes"  ; Same path as VAULT_PATH above
+
 folders := [
     "Tech", "Tech\Coding", "Tech\Gadgets",
     "Finance", "Finance\Investing",
@@ -108,7 +114,7 @@ Filename: `20260413_120000_Tools.md`
 
 Saved directly as PNG. Filename: `20260413_135012_Budgeting.png`
 
-Images are automatically resized to max 800×800px before sending to AI (originals are saved at resized quality).
+Images are automatically resized to max 800×800px before sending to AI (to reduce API payload).
 
 ## Cost
 
@@ -134,17 +140,28 @@ Change the `MODEL` variable in the script:
 
 > **Tip:** Text-only models are slightly more accurate for text classification. Use a vision model only if you need screenshot support.
 
+## Compatible Apps
+
+ClipSort saves standard `.md` and `.png` files to regular folders. Any app that reads local files will work:
+
+- **[Obsidian](https://obsidian.md/)** — Point your vault to the ClipSort folder
+- **[Logseq](https://logseq.com/)** — Use as your graph directory
+- **[Typora](https://typora.io/)** — Open the folder directly
+- **VS Code** — Great for browsing markdown files
+- **Any file manager** — It's just files in folders
+
 ## Configuration
 
 ### Ignored folders
 
 These folders are excluded from AI's options (edit `ScanFolderTree` in the script):
 
-- `.obsidian`, `attachments`, `Clippings`, `templates`, `Inbox`
+- Hidden folders (starting with `.`)
+- `attachments`, `Clippings`, `templates`, `Inbox`
 
 ### Adding folders
 
-Just create new folders in your vault — ClipSort scans the latest structure every time.
+Just create new folders in your target directory — ClipSort scans the latest structure every time you press the hotkey.
 
 ## Troubleshooting
 
@@ -152,14 +169,14 @@ Just create new folders in your vault — ClipSort scans the latest structure ev
 |---|---|
 | "Clipboard is empty" | Content might be rich text. Try pasting to Notepad first, then re-copy. |
 | "Failed to save image" | Make sure your screenshot tool copies to clipboard (not to a file). |
-| Everything goes to Inbox | Use Debug mode (Ctrl+Shift+Alt+D) to check AI response. |
+| Everything goes to Inbox | Use Debug mode (Ctrl+Shift+Alt+D) to check AI response format. |
 | Text vs screenshot classify differently | Normal — text classification is more accurate. Use text when possible. |
 | HTTP 400 error | Check API key. Some models may have provider issues — try the default model. |
 
 ## How It Works (Technical)
 
 - **Clipboard detection**: Win32 `IsClipboardFormatAvailable` API (CF_BITMAP / CF_DIB)
-- **Image capture**: PowerShell with `-STA` flag to access clipboard images
+- **Image capture**: PowerShell with `-STA` flag to access GUI clipboard
 - **Image processing**: Auto-resize via `System.Drawing` to reduce API payload
 - **Base64 encoding**: PowerShell `[Convert]::ToBase64String`
 - **AI API**: OpenRouter (OpenAI-compatible) chat completions with vision support
